@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Amanecer Pinturas – Archivos digitales de productos</title>
+<style>
+:root{--bg:#fff8f0;--card:#fff;--text:#2b2118;--muted:#7a6a5c;--accent:#e8731a;--line:#f0dcc8}
+@media (prefers-color-scheme:dark){:root{--bg:#1c1612;--card:#2a221b;--text:#f6ece0;--muted:#b9a794;--accent:#ff9340;--line:#3d3228}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;min-height:100vh}
+header{text-align:center;padding:36px 16px 24px;border-bottom:4px solid var(--accent)}
+header h1{margin:0;font-size:clamp(1.5rem,5vw,2.6rem);letter-spacing:.04em;text-transform:uppercase}
+header p{margin:8px 0 0;color:var(--muted)}
+main{max-width:900px;margin:0 auto;padding:28px 16px}
+.brands{display:flex;gap:20px;flex-wrap:wrap;justify-content:center;margin-top:30px}
+.brand{flex:1 1 240px;max-width:360px;min-height:180px;border:2px solid var(--line);border-radius:20px;background:var(--card);color:var(--text);font-size:2rem;font-weight:700;cursor:pointer;transition:.15s}
+.brand:hover{transform:translateY(-4px);border-color:var(--accent);color:var(--accent)}
+.back{background:none;border:0;color:var(--accent);font-size:1rem;cursor:pointer;padding:6px 0;margin-bottom:10px}
+h2{margin:0 0 16px}
+.search{width:100%;padding:14px 18px;font-size:1.1rem;border:2px solid var(--line);border-radius:999px;background:var(--card);color:var(--text);outline:none}
+.search:focus{border-color:var(--accent)}
+.hint{color:var(--muted);margin:14px 4px}
+.results{display:grid;gap:14px;margin-top:18px}
+.folder{border:2px solid var(--line);border-radius:16px;background:var(--card);overflow:hidden}
+.folder>button{all:unset;display:flex;align-items:center;gap:12px;width:100%;padding:16px 18px;cursor:pointer;font-size:1.2rem;font-weight:600;box-sizing:border-box}
+.folder>button .ic{font-size:2rem}
+.folder>button small{margin-left:auto;color:var(--muted);font-weight:400;font-size:.85rem}
+.files{display:none;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px;padding:0 16px 18px}
+.folder.open .files{display:grid}
+.file{border:1px solid var(--line);border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
+.file .img{aspect-ratio:3/4;background:var(--line);display:flex;align-items:center;justify-content:center;color:var(--muted);text-align:center;padding:6px}
+.file img{width:100%;height:100%;object-fit:cover;display:block}
+.file .big{font-size:3rem}
+.file .cap{padding:8px 10px;text-align:center;font-weight:600;font-size:.95rem}
+.file .cap small{display:block;font-weight:400;color:var(--muted);font-size:.78rem;word-break:break-word}
+.dl{display:flex;align-items:center;justify-content:center;background:var(--accent);color:#fff;font-weight:700;text-decoration:none;min-height:48px;margin-top:auto}
+.none{text-align:center;color:var(--muted);padding:30px}
+[hidden]{display:none!important}
+@media (max-width:600px){
+ header{padding:24px 12px 18px}
+ main{padding:20px 12px}
+ .brand{flex:1 1 100%;max-width:none;min-height:110px;font-size:1.7rem}
+ .search{font-size:16px}
+ .files{grid-template-columns:repeat(2,1fr);gap:10px;padding:0 10px 14px}
+ .folder>button{padding:14px}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>Amanecer Pinturas</h1>
+  <p>Archivos digitales de productos</p>
+</header>
+<main>
+  <section id="home">
+    <div class="brands">
+      <button class="brand" data-brand="Amanecer">Amanecer</button>
+      <button class="brand" data-brand="Opal">Opal</button>
+    </div>
+  </section>
+  <section id="search" hidden>
+    <button class="back" id="back">← Volver</button>
+    <h2 id="title"></h2>
+    <input id="q" class="search" type="search" placeholder="Buscá un producto, ej: Goma líquida" autocomplete="off">
+    <p class="hint" id="hint"></p>
+    <div class="results" id="results"></div>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const TYPES = [["flyer","Flyer"],["ficha","Ficha técnica"],["catalogo","Catálogo"]];
+const TYPE_WORDS = new Set(["flyer","flyers","ficha","fichas","tecnica","tecnicas","catalogo","catalogos"]);
+const norm = s => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[_\-.]+/g," ").replace(/\s+/g," ").trim();
+const ns = s => norm(s).replace(/ /g,"");
+const title = s => s.replace(/\b\w/g,c=>c.toUpperCase());
+let MANIFEST = null, folders = [], brand = null;
+
+fetch("manifest.json?"+Date.now()).then(r=>r.json()).then(m=>MANIFEST=m).catch(()=>MANIFEST={});
+
+function build(brandName){
+  const files = (MANIFEST[brandName]||[]).map(name=>{
+    const base = name.replace(/\.[^.]+$/,""), n = norm(base);
+    const ext = (name.match(/\.([^.]+)$/)||[])[1]?.toLowerCase()||"";
+    const t = TYPES.find(([k])=>n.includes(k));
+    const key = n.split(" ").filter(w=>!TYPE_WORDS.has(w)).join(" ") || n;
+    return {name, base, ext, type:t?t[1]:"Otro", rank:t?TYPES.findIndex(x=>x[0]===t[0]):9, key,
+            url:`archivos/${encodeURIComponent(brandName)}/${encodeURIComponent(name)}`};
+  });
+  const keys = [...new Set(files.map(f=>f.key))].sort((a,b)=>ns(a).length-ns(b).length);
+  const roots = [], map = {};
+  keys.forEach(k=>{ const r = roots.find(r=>ns(k).startsWith(ns(r))); if(r) map[k]=r; else {roots.push(k); map[k]=k;} });
+  const g = {};
+  files.forEach(f=>{ (g[map[f.key]] = g[map[f.key]]||[]).push(f); });
+  return Object.entries(g).map(([root,fs])=>({
+    title:title(root), key:ns(root),
+    files:fs.sort((a,b)=>a.rank-b.rank||a.name.localeCompare(b.name,"es",{numeric:true}))
+  })).sort((a,b)=>a.title.localeCompare(b.title,"es"));
+}
+
+function card(f){
+  const img = ["jpg","jpeg","png","webp","gif"].includes(f.ext)
+    ? `<img src="${f.url}" alt="${f.base}" loading="lazy">`
+    : `<div><div class="big">${f.ext==="pdf"?"📄":"📎"}</div>${f.ext.toUpperCase()}</div>`;
+  return `<div class="file"><div class="img">${img}</div>
+    <div class="cap">${f.type}<small>${f.base}</small></div>
+    <a class="dl" href="${f.url}" download="${f.name}">⬇ Descargar</a></div>`;
+}
+
+function render(){
+  const q = ns($("q").value), box = $("results");
+  const list = q ? folders.filter(f=>f.key.includes(q)||f.files.some(x=>ns(x.base).includes(q))) : folders;
+  box.innerHTML = "";
+  if(!folders.length){ $("hint").textContent="Todavía no hay archivos cargados en esta marca."; return; }
+  $("hint").textContent = q ? "" : `${folders.length} productos. Escribí para buscar o tocá una carpeta.`;
+  if(!list.length){ box.innerHTML = `<div class="none">No se encontró ningún producto con ese nombre.</div>`; return; }
+  list.forEach(p=>{
+    const d = document.createElement("div");
+    d.className = "folder"+(q?" open":"");
+    d.innerHTML = `<button><span class="ic">📁</span>${p.title}<small>${p.files.length} archivos</small></button>
+      <div class="files">${p.files.map(card).join("")}</div>`;
+    d.querySelector("button").onclick = ()=>d.classList.toggle("open");
+    box.appendChild(d);
+  });
+}
+
+document.querySelectorAll(".brand").forEach(b=>b.onclick=async()=>{
+  while(MANIFEST===null) await new Promise(r=>setTimeout(r,50));
+  brand = b.dataset.brand; folders = build(brand);
+  $("home").hidden = true; $("search").hidden = false;
+  $("title").textContent = brand; $("q").value = ""; render(); $("q").focus();
+});
+$("back").onclick = ()=>{ $("search").hidden = true; $("home").hidden = false; };
+$("q").oninput = render;
+</script>
+</body>
+</html>
